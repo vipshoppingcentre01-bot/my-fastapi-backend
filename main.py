@@ -1,12 +1,12 @@
 import os
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 
 app = FastAPI(title="Master AI Controller Hub")
 
-# Enable CORS so your web frontends can call this API directly
+# Enable CORS so your local HTML frontend can communicate with Render
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,23 +25,35 @@ def home():
 
 
 @app.get("/search")
-def search_engine(query: str, x_api_key: str = Header(None)):
+def search_engine(
+    query: str, mode: str = "ai_overview", x_api_key: str = Header(None)
+):
     if x_api_key != API_KEY:
         raise HTTPException(
             status_code=401, detail="Invalid or missing API key."
         )
 
     try:
-        # Step 1: Get raw web search results
-        ddg = DDGS()
-        raw_results = list(ddg.text(query, max_results=5))
+        raw_results = []
+        with DDGS() as ddg:
+            results = ddg.text(query, max_results=5)
+            if results:
+                raw_results = list(results)
 
-        # Step 2: Pass search results to Gemini AI to synthesize a smart summary
+        if mode == "quick":
+            return {
+                "query": query,
+                "ai_summary": "Quick Web Mode active. Direct web search results retrieved below.",
+                "web_sources": raw_results,
+            }
+
         prompt = (
-            f"User asked: '{query}'\n\n"
-            f"Here are top web search results:\n{raw_results}\n\n"
-            "Provide a concise, direct, and well-structured answer based on these web results. "
-            "Include key takeaways and cite relevant URLs if useful."
+            f"User Query: '{query}'\n\n"
+            f"Web Results:\n{raw_results}\n\n"
+            "Format the response into 3 clear sections:\n"
+            "1. 💡 Direct Answer\n"
+            "2. 📌 Key Takeaways\n"
+            "3. 🔍 Follow-Up Questions"
         )
 
         ai_response = ai_client.models.generate_content(
@@ -53,5 +65,6 @@ def search_engine(query: str, x_api_key: str = Header(None)):
             "ai_summary": ai_response.text,
             "web_sources": raw_results,
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
