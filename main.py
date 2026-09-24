@@ -3,7 +3,6 @@ import traceback
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
-from google.genai import types
 
 app = FastAPI(title="Master AI Controller Hub")
 
@@ -16,8 +15,6 @@ app.add_middleware(
 )
 
 API_KEY = "my_super_secret_app_key_123"
-
-# Initialize GenAI Client using environment variable GEMINI_API_KEY
 ai_client = genai.Client()
 
 
@@ -36,7 +33,6 @@ def search_engine(
         )
 
     try:
-        # Step 1: Query Gemini AI for detailed synthesis
         prompt = (
             f"You are a real-time web search assistant. Answer the user query clearly and comprehensively.\n\n"
             f"User Query: '{query}'\n\n"
@@ -46,6 +42,7 @@ def search_engine(
             "3. 🔍 Related Topics & Ideas to Explore"
         )
 
+        # Update model name here
         response = ai_client.models.generate_content(
             model="gemini-2.5-flash", contents=prompt
         )
@@ -57,7 +54,7 @@ def search_engine(
                 {
                     "title": f"Google Search Results for '{query}'",
                     "href": f"https://www.google.com/search?q={query}",
-                    "body": "Direct link to full Google search results.",
+                    "body": "Direct link to full web results.",
                 }
             ],
         }
