@@ -42,7 +42,7 @@ def search_engine(
             "3. 🔍 Related Topics & Ideas to Explore"
         )
 
-        # Update model name here
+        # Uses the active model name
         response = ai_client.models.generate_content(
             model="gemini-2.5-flash", contents=prompt
         )
