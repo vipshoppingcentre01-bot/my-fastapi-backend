@@ -1,55 +1,57 @@
 import os
+from duckduckgo_search import DDGS
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 
 app = FastAPI(title="Master AI Controller Hub")
 
-# Your master security key for your personal apps
-API_KEY = "my secret api key"
+# Enable CORS so your web frontends can call this API directly
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Initialize Google GenAI client (automatically reads GEMINI_API_KEY from environment)
+API_KEY = "my_super_secret_app_key_123"
 ai_client = genai.Client()
 
 
 @app.get("/")
 def home():
-    return {
-        "message": "Master AI Controller Hub is online!",
-        "status": "Ready to route requests to satellite apps.",
-    }
+    return {"message": "Master AI Controller Hub is online!"}
 
 
-@app.get("/secret-data")
-def get_secret_data(x_api_key: str = Header(None)):
+@app.get("/search")
+def search_engine(query: str, x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
-    return {
-        "status": "Success",
-        "data": "Hello future app! You unlocked this private data using your API key.",
-    }
-
-
-@app.post("/ai-command")
-def process_command(prompt: str, x_api_key: str = Header(None)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing API key."
+        )
 
     try:
-        # Route user prompt through Gemini model
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=(
-                "You are the Central AI Controller for a suite of personal apps "
-                "(Search Engine, Notes, Fitness Tracker). "
-                f"Analyze this command and respond helpfully: {prompt}"
-            ),
+        # Step 1: Get raw web search results
+        ddg = DDGS()
+        raw_results = list(ddg.text(query, max_results=5))
+
+        # Step 2: Pass search results to Gemini AI to synthesize a smart summary
+        prompt = (
+            f"User asked: '{query}'\n\n"
+            f"Here are top web search results:\n{raw_results}\n\n"
+            "Provide a concise, direct, and well-structured answer based on these web results. "
+            "Include key takeaways and cite relevant URLs if useful."
         )
+
+        ai_response = ai_client.models.generate_content(
+            model="gemini-2.5-flash", contents=prompt
+        )
+
         return {
-            "status": "Success",
-            "prompt": prompt,
-            "ai_response": response.text,
+            "query": query,
+            "ai_summary": ai_response.text,
+            "web_sources": raw_results,
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"AI Processing failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
