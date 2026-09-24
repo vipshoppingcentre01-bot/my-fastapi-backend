@@ -1,43 +1,55 @@
-import hashlib
-from fastapi import Depends, FastAPI, HTTPException, Header
+import os
+from fastapi import FastAPI, Header, HTTPException
+from google import genai
 
-# 1. Initialize our API app
-app = FastAPI(title="My Universal API")
+app = FastAPI(title="Master AI Controller Hub")
 
-# 2. This is our master secret API Key
-# In real life, you give this key to your future app!
-MASTER_API_KEY = "my_super_secret_app_key_123"
+# Your master security key for your personal apps
+API_KEY = "my secret api key"
 
-# Save the hashed secret code (like we learned before)
-VALID_KEY_HASH = hashlib.sha256(MASTER_API_KEY.encode()).hexdigest()
-
-
-# 3. The Guard Function: Checks incoming API Keys
-def verify_api_key(x_api_key: str = Header(...)):
-    """This function acts like a bouncer at the door."""
-    # Hash the incoming key sent by the caller
-    incoming_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
-
-    # Compare it to our saved secret code
-    if incoming_hash != VALID_KEY_HASH:
-        # Block them with a 401 Unauthorized error
-        raise HTTPException(
-            status_code=401, detail="Stop! Invalid or missing API Key."
-        )
-
-    return x_api_key
+# Initialize Google GenAI client (automatically reads GEMINI_API_KEY from environment)
+ai_client = genai.Client()
 
 
-# 4. Public Route (Anyone can visit this without an API Key)
 @app.get("/")
 def home():
-    return {"message": "Welcome! The API is live and running."}
+    return {
+        "message": "Master AI Controller Hub is online!",
+        "status": "Ready to route requests to satellite apps.",
+    }
 
 
-# 5. Protected Route (Requires a valid API Key)
-@app.get("/secret-data", dependencies=[Depends(verify_api_key)])
-def get_secret_data():
+@app.get("/secret-data")
+def get_secret_data(x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
     return {
         "status": "Success",
         "data": "Hello future app! You unlocked this private data using your API key.",
     }
+
+
+@app.post("/ai-command")
+def process_command(prompt: str, x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+
+    try:
+        # Route user prompt through Gemini model
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=(
+                "You are the Central AI Controller for a suite of personal apps "
+                "(Search Engine, Notes, Fitness Tracker). "
+                f"Analyze this command and respond helpfully: {prompt}"
+            ),
+        )
+        return {
+            "status": "Success",
+            "prompt": prompt,
+            "ai_response": response.text,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"AI Processing failed: {str(e)}"
+        )
