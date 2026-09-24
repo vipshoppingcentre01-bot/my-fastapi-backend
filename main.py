@@ -42,9 +42,9 @@ def search_engine(
             "3. 🔍 Related Topics & Ideas to Explore"
         )
 
-        # Uses the active model name
+        # Using the dynamic alias prevents 404 version errors
         response = ai_client.models.generate_content(
-            model="gemini-2.5-flash", contents=prompt
+            model="gemini-flash-latest", contents=prompt
         )
 
         return {
