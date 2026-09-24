@@ -17,6 +17,13 @@ app.add_middleware(
 API_KEY = "my_super_secret_app_key_123"
 ai_client = genai.Client()
 
+# List of models to try in sequence if one is unavailable or rate-limited
+MODEL_FALLBACKS = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-flash-latest",
+]
+
 
 @app.get("/")
 def home():
@@ -32,34 +39,42 @@ def search_engine(
             status_code=401, detail="Invalid or missing API key."
         )
 
-    try:
-        prompt = (
-            f"You are a real-time web search assistant. Answer the user query clearly and comprehensively.\n\n"
-            f"User Query: '{query}'\n\n"
-            "Format the response into 3 clear sections:\n"
-            "1. 💡 Direct Answer\n"
-            "2. 📌 Key Details & Concepts\n"
-            "3. 🔍 Related Topics & Ideas to Explore"
-        )
+    prompt = (
+        f"You are a real-time web search assistant. Answer the user query clearly and comprehensively.\n\n"
+        f"User Query: '{query}'\n\n"
+        "Format the response into 3 clear sections:\n"
+        "1. 💡 Direct Answer\n"
+        "2. 📌 Key Details & Concepts\n"
+        "3. 🔍 Related Topics & Ideas to Explore"
+    )
 
-        # Using the dynamic alias prevents 404 version errors
-        response = ai_client.models.generate_content(
-            model="gemini-flash-latest", contents=prompt
-        )
+    last_exception = None
 
-        return {
-            "query": query,
-            "ai_summary": response.text,
-            "web_sources": [
-                {
-                    "title": f"Google Search Results for '{query}'",
-                    "href": f"https://www.google.com/search?q={query}",
-                    "body": "Direct link to full web results.",
-                }
-            ],
-        }
+    # Try each model in sequence
+    for model_name in MODEL_FALLBACKS:
+        try:
+            response = ai_client.models.generate_content(
+                model=model_name, contents=prompt
+            )
 
-    except Exception as e:
-        error_details = traceback.format_exc()
-        print(f"ERROR IN /search: {error_details}")
-        raise HTTPException(status_code=500, detail=f"Search Error: {str(e)}")
+            return {
+                "query": query,
+                "ai_summary": response.text,
+                "web_sources": [
+                    {
+                        "title": f"Google Search Results for '{query}'",
+                        "href": f"https://www.google.com/search?q={query}",
+                        "body": "Direct link to full web results.",
+                    }
+                ],
+            }
+        except Exception as e:
+            print(f"Model {model_name} failed: {str(e)}. Retrying next fallback...")
+            last_exception = e
+
+    # If all models fail, raise error details
+    error_details = traceback.format_exc()
+    print(f"ALL MODELS FAILED: {error_details}")
+    raise HTTPException(
+        status_code=500, detail=f"Search Error: {str(last_exception)}"
+    )
