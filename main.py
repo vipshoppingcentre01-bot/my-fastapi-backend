@@ -1,4 +1,5 @@
 import os
+import traceback
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
@@ -15,6 +16,8 @@ app.add_middleware(
 )
 
 API_KEY = "my_super_secret_app_key_123"
+
+# Initialize GenAI Client using environment variable GEMINI_API_KEY
 ai_client = genai.Client()
 
 
@@ -33,56 +36,33 @@ def search_engine(
         )
 
     try:
-        if mode == "quick":
-            # Quick mode: standard fast response without live search
-            response = ai_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=f"Provide a quick, concise direct answer for: {query}",
-            )
-            return {
-                "query": query,
-                "ai_summary": response.text,
-                "web_sources": [],
-            }
-
-        # Deep mode: Uses native Google Search grounding
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=(
-                f"Perform a live search and answer this query: '{query}'. "
-                "Format the response into 3 sections:\n"
-                "1. 💡 Direct Answer\n"
-                "2. 📌 Key Takeaways\n"
-                "3. 🔍 Related Insights"
-            ),
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())]
-            ),
+        # Step 1: Query Gemini AI for detailed synthesis
+        prompt = (
+            f"You are a real-time web search assistant. Answer the user query clearly and comprehensively.\n\n"
+            f"User Query: '{query}'\n\n"
+            "Format the response into 3 clear sections:\n"
+            "1. 💡 Direct Answer\n"
+            "2. 📌 Key Details & Concepts\n"
+            "3. 🔍 Related Topics & Ideas to Explore"
         )
 
-        # Extract source URLs from grounding metadata if available
-        sources = []
-        try:
-            grounding_chunks = (
-                response.candidates[0]
-                .grounding_metadata.grounding_chunks
-            )
-            if grounding_chunks:
-                for chunk in grounding_chunks:
-                    if chunk.web:
-                        sources.append({
-                            "title": chunk.web.title or chunk.web.uri,
-                            "href": chunk.web.uri,
-                            "body": "Google Search Source",
-                        })
-        except Exception:
-            sources = []
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash", contents=prompt
+        )
 
         return {
             "query": query,
             "ai_summary": response.text,
-            "web_sources": sources,
+            "web_sources": [
+                {
+                    "title": f"Google Search Results for '{query}'",
+                    "href": f"https://www.google.com/search?q={query}",
+                    "body": "Direct link to full Google search results.",
+                }
+            ],
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        error_details = traceback.format_exc()
+        print(f"ERROR IN /search: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Search Error: {str(e)}")
